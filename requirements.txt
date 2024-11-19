@@ -1,3 +1,5 @@
 pyrogram 
 tgcrypto 
 crawl4ai
+nest_asyncio
+playwright
