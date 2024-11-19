@@ -1,5 +1,5 @@
 pyrogram 
 tgcrypto 
-crawl4ai
+crawl4ai[sync]
 nest_asyncio
 playwright
