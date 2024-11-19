@@ -5,6 +5,11 @@ from urllib.parse import urlparse
 import os
 from datetime import datetime
 
+API_ID = 23080322
+API_HASH = "b3611c291bf82d917637d61e4a136535"
+BOT_TOKEN = "7259823333:AAEzKjJSr5AY8dtIR7inBL7S_14S_h1uvZc"
+
+
 
 # Initialize the Pyrogram client
 app = Client(
