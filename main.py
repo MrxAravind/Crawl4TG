@@ -108,10 +108,6 @@ async def fresh_crawl_command(client, message):
         disable_web_page_preview=True
     )
 
-# Error handler
-@app.on_message(filters.error)
-async def error_handler(client, message):
-    await message.reply_text("An error occurred while processing your request. Please try again later.")
 
 # Main function to run the bot
 async def main():
