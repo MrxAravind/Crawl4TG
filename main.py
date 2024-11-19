@@ -112,5 +112,5 @@ async def fresh_crawl_command(client, message):
 
 if __name__ == "__main__":
     print("Bot is running...")
-    await app.run()
+    app.run()
     
