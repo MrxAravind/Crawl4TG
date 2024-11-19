@@ -109,11 +109,8 @@ async def fresh_crawl_command(client, message):
     )
 
 
-# Main function to run the bot
-async def main():
-    await app.start()
-    print("Bot is running...")
-    await app.idle()
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    print("Bot is running...")
+    await app.run()
+    
