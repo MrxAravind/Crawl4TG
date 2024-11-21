@@ -2,14 +2,10 @@ import asyncio
 from pyrogram import Client, filters
 from crawl4ai import AsyncWebCrawler
 from urllib.parse import urlparse
-import os
-from datetime import datetime
 
 API_ID = 23080322
 API_HASH = "b3611c291bf82d917637d61e4a136535"
 BOT_TOKEN = "7259823333:AAEzKjJSr5AY8dtIR7inBL7S_14S_h1uvZc"
-
-
 
 # Initialize the Pyrogram client
 app = Client(
@@ -27,7 +23,7 @@ def is_valid_url(url):
     try:
         result = urlparse(url)
         return all([result.scheme, result.netloc])
-    except:
+    except Exception:
         return False
 
 async def crawl_url(url, bypass_cache=False):
@@ -65,7 +61,6 @@ async def help_command(client, message):
 # Command handler for /crawl
 @app.on_message(filters.command("crawl"))
 async def crawl_command(client, message):
-    # Check if URL is provided
     if len(message.command) < 2:
         await message.reply_text("Please provide a URL to crawl.\nExample: /crawl https://example.com")
         return
@@ -108,9 +103,7 @@ async def fresh_crawl_command(client, message):
         disable_web_page_preview=True
     )
 
-
-
+# Run the bot
 if __name__ == "__main__":
     print("Bot is running...")
     app.run()
-    
