@@ -1,38 +1,81 @@
+import os
 import asyncio
+import logging
 from pyrogram import Client, filters
 from crawl4ai import AsyncWebCrawler
 from urllib.parse import urlparse
+from dotenv import load_dotenv
 
-API_ID = 23080322
-API_HASH = "b3611c291bf82d917637d61e4a136535"
-BOT_TOKEN = "7259823333:AAEzKjJSr5AY8dtIR7inBL7S_14S_h1uvZc"
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Load environment variables
+load_dotenv()
+
+# Fetch credentials from environment variables
+API_ID = os.getenv('TELEGRAM_API_ID')
+API_HASH = os.getenv('TELEGRAM_API_HASH')
+BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
+
+# Validate credentials
+if not all([API_ID, API_HASH, BOT_TOKEN]):
+    raise ValueError("Missing Telegram bot credentials. Please set TELEGRAM_API_ID, TELEGRAM_API_HASH, and TELEGRAM_BOT_TOKEN in .env file")
 
 # Initialize the Pyrogram client
 app = Client(
     "web_crawler_bot",
-    api_id=API_ID,
+    api_id=int(API_ID),  # Convert to integer
     api_hash=API_HASH,
     bot_token=BOT_TOKEN
 )
 
-# Initialize the web crawler
-crawler = AsyncWebCrawler()
+# Initialize the web crawler with explicit database configuration
+crawler = AsyncWebCrawler(
+    # Explicitly set database parameters to avoid potential conflicts
+    database_type="sqlite",  # or another type if needed
+    database_path=os.path.join(os.getcwd(), "crawler_cache.db"),
+    cache_age=24*60*60  # Cache for 24 hours
+)
 
 def is_valid_url(url):
     """Check if the provided URL is valid"""
     try:
         result = urlparse(url)
         return all([result.scheme, result.netloc])
-    except Exception:
+    except Exception as e:
+        logger.error(f"URL validation error: {e}")
         return False
 
 async def crawl_url(url, bypass_cache=False):
-    """Perform web crawling with error handling"""
+    """Perform web crawling with robust error handling"""
     try:
-        result = await crawler.arun(url=url)
-        return result.markdown[:4000]  # Telegram has message length limits
-    except Exception as e:
-        return f"Error crawling the URL: {str(e)}"
+        # Additional URL validation
+        if not is_valid_url(url):
+            return "Invalid URL provided."
+        
+        # Enhanced crawling with explicit error handling
+        try:
+            result = await crawler.arun(
+                url=url, 
+                bypass_cache=bypass_cache,
+                timeout=10  # Added timeout to prevent hanging
+            )
+            
+            # Check if result is empty or None
+            if not result or not result.markdown:
+                return "No content could be retrieved from the URL."
+            
+            # Truncate to Telegram message length
+            return result.markdown[:4000]
+        
+        except Exception as crawl_error:
+            logger.error(f"Crawling error for {url}: {crawl_error}")
+            return f"Crawling failed: {str(crawl_error)}"
+    
+    except Exception as unexpected_error:
+        logger.error(f"Unexpected error in crawl_url: {unexpected_error}")
+        return "An unexpected error occurred during crawling."
 
 # Command handler for /start
 @app.on_message(filters.command("start"))
@@ -64,15 +107,12 @@ async def crawl_command(client, message):
     if len(message.command) < 2:
         await message.reply_text("Please provide a URL to crawl.\nExample: /crawl https://example.com")
         return
-
+    
     url = message.command[1]
-    if not is_valid_url(url):
-        await message.reply_text("Please provide a valid URL.")
-        return
-
+    
     # Send "processing" message
     status_message = await message.reply_text("🔄 Processing your request...")
-
+    
     # Perform crawling
     result = await crawl_url(url)
     
@@ -88,12 +128,9 @@ async def fresh_crawl_command(client, message):
     if len(message.command) < 2:
         await message.reply_text("Please provide a URL to crawl.\nExample: /fresh https://example.com")
         return
-
+    
     url = message.command[1]
-    if not is_valid_url(url):
-        await message.reply_text("Please provide a valid URL.")
-        return
-
+    
     status_message = await message.reply_text("🔄 Processing your request (bypassing cache)...")
     
     result = await crawl_url(url, bypass_cache=True)
