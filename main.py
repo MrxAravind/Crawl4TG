@@ -1,6 +1,7 @@
 import os
 import asyncio
 import logging
+import sqlite3
 from pyrogram import Client, filters
 from crawl4ai import AsyncWebCrawler
 from urllib.parse import urlparse
@@ -22,6 +23,43 @@ BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 if not all([API_ID, API_HASH, BOT_TOKEN]):
     raise ValueError("Missing Telegram bot credentials. Please set TELEGRAM_API_ID, TELEGRAM_API_HASH, and TELEGRAM_BOT_TOKEN in .env file")
 
+# Database initialization function
+def initialize_database(db_path):
+    """
+    Ensure the database and required tables are created
+    """
+    try:
+        # Ensure directory exists
+        os.makedirs(os.path.dirname(db_path), exist_ok=True)
+        
+        # Connect to the database
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        # Create crawled_data table if it doesn't exist
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS crawled_data (
+                url TEXT PRIMARY KEY,
+                content TEXT,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Commit changes and close connection
+        conn.commit()
+        conn.close()
+        
+        logger.info(f"Database initialized at {db_path}")
+    except Exception as e:
+        logger.error(f"Database initialization error: {e}")
+        raise
+
+# Set up database path
+DB_PATH = os.path.join(os.getcwd(), 'crawler_cache', 'crawler_cache.db')
+
+# Initialize database before creating crawler
+initialize_database(DB_PATH)
+
 # Initialize the Pyrogram client
 app = Client(
     "web_crawler_bot",
@@ -32,9 +70,8 @@ app = Client(
 
 # Initialize the web crawler with explicit database configuration
 crawler = AsyncWebCrawler(
-    # Explicitly set database parameters to avoid potential conflicts
-    database_type="sqlite",  # or another type if needed
-    database_path=os.path.join(os.getcwd(), "crawler_cache.db"),
+    database_type="sqlite",
+    database_path=DB_PATH,
     cache_age=24*60*60  # Cache for 24 hours
 )
 
@@ -71,13 +108,28 @@ async def crawl_url(url, bypass_cache=False):
         
         except Exception as crawl_error:
             logger.error(f"Crawling error for {url}: {crawl_error}")
+            # If database error occurs, try reinitializing
+            if "no such table" in str(crawl_error):
+                try:
+                    initialize_database(DB_PATH)
+                    # Retry crawling after database reinitialization
+                    result = await crawler.arun(
+                        url=url, 
+                        bypass_cache=True,
+                        timeout=10
+                    )
+                    return result.markdown[:4000]
+                except Exception as reinit_error:
+                    logger.error(f"Reinitialization error: {reinit_error}")
+                    return f"Crawling failed after database reset: {str(reinit_error)}"
+            
             return f"Crawling failed: {str(crawl_error)}"
     
     except Exception as unexpected_error:
         logger.error(f"Unexpected error in crawl_url: {unexpected_error}")
         return "An unexpected error occurred during crawling."
 
-# Command handler for /start
+# Command handlers remain the same as in previous version
 @app.on_message(filters.command("start"))
 async def start_command(client, message):
     await message.reply_text(
@@ -88,7 +140,6 @@ async def start_command(client, message):
         "/help - Show this help message"
     )
 
-# Command handler for /help
 @app.on_message(filters.command("help"))
 async def help_command(client, message):
     await message.reply_text(
@@ -101,7 +152,6 @@ async def help_command(client, message):
         "/crawl https://example.com"
     )
 
-# Command handler for /crawl
 @app.on_message(filters.command("crawl"))
 async def crawl_command(client, message):
     if len(message.command) < 2:
@@ -122,7 +172,6 @@ async def crawl_command(client, message):
         disable_web_page_preview=True
     )
 
-# Command handler for /fresh (bypass cache)
 @app.on_message(filters.command("fresh"))
 async def fresh_crawl_command(client, message):
     if len(message.command) < 2:
