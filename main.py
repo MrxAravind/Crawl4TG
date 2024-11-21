@@ -33,7 +33,7 @@ def is_valid_url(url):
 async def crawl_url(url, bypass_cache=False):
     """Perform web crawling with error handling"""
     try:
-        result = await crawler.arun(url=url, bypass_cache=bypass_cache)
+        result = await crawler.arun(url=url)
         return result.markdown[:4000]  # Telegram has message length limits
     except Exception as e:
         return f"Error crawling the URL: {str(e)}"
