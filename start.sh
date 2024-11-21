@@ -1,1 +1,2 @@
-python -m playwright install chromium && python main.py
+python -m playwright install chromium
+python main.py
