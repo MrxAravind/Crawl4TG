@@ -196,14 +196,15 @@ async def fetch_command(client, message):
             output_template = os.path.join(os.getcwd(), "downloads", f"{title}.%(ext)s")
             os.makedirs(os.path.dirname(output_template), exist_ok=True)
             
-            # Run yt-dlp to download the video
+            # Run yt-dlp with aria2c as the external downloader
             command = [
                 "yt-dlp",
+                "--external-downloader", "aria2c",
                 "--output", output_template,
                 video_url
             ]
             
-            await status_message.edit_text("🔄 Downloading the video...")
+            await status_message.edit_text("🔄 Downloading the video with aria2c...")
             subprocess.run(command, check=True)
             
             # Find the downloaded video file
@@ -215,7 +216,7 @@ async def fetch_command(client, message):
             if downloaded_video and os.path.exists(downloaded_video):
                 # Upload the video back to Telegram
                 await status_message.edit_text("🔼 Uploading the video to Telegram...")
-                await client.send_video(
+                await app.send_video(
                     chat_id=message.chat.id,
                     video=downloaded_video,
                     caption="📹 Here is your downloaded video!"
