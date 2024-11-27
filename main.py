@@ -64,12 +64,12 @@ async def fetch_pages(base_url, end_page):
                     exclude_external_links=True,
                     exclude_social_media_links=True,
                 )
-                images = [
-                    [img["src"], f"https://missav.com/en/{img['src'].split('/')[-2]}"]
+                videos = [
+                    [img["alt"],img["src"], f"https://missav.com/en/{img['src'].split('/')[-2]}"]
                     for img in result.media.get("images", [])
                     if img["src"] and "flag" not in img["src"]
                 ]
-                results.extend(images)
+                results.extend(videos)
             except Exception as e:
                 logger.error(f"Error analyzing {url}: {e}")
     return results
