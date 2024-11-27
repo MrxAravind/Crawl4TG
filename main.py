@@ -8,7 +8,7 @@ from urllib.parse import urlparse
 from dotenv import load_dotenv
 from telegraph import Telegraph
 import subprocess
-
+import static_ffmpeg
 
 
 # Configure logging
@@ -59,6 +59,9 @@ telegraph = Telegraph()
 telegraph.create_account(short_name="WebCrawlerBot")
 
 crawler = AsyncWebCrawler(database_type="sqlite", database_path=DB_PATH, cache_age=24*60*60)
+
+static_ffmpeg.add_paths()
+
 
 async def fetch_pages(base_url, end_page):
     results = []
