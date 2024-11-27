@@ -109,7 +109,7 @@ async def miss_command(client, message):
     status_message = await message.reply_text("🔄 Fetching MissAV links...")
     links = await fetch_pages(base_url, end_page=pages)
     src_links = [link + [await crawl_missav(link[-1])] for link in links]
-    formatted_links = "\n".join([link[0] for link in src_links])  # Extract URLs from results
+    formatted_links = "\n".join([f"{i + 1}. {link[0]}" for i, link in enumerate(src_links)])
     await status_message.edit_text(f"📄 Links fetched:\n\n{formatted_links}", disable_web_page_preview=True)
 
 
