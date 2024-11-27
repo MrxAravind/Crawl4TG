@@ -88,6 +88,17 @@ async def crawl_missav(link):
             logger.error(f"Error crawling {link}: {e}")
             return None
 
+
+async def simple_crawl(link):
+    async with AsyncWebCrawler() as crawler:
+        try:
+            result = await crawler.arun(url=link)
+            return result[4000] if result else None
+        except Exception as e:
+            logger.error(f"Error crawling {link}: {e}")
+            return None
+
+
 # Telegram bot commands
 @app.on_message(filters.command("miss"))
 async def miss_command(client, message):
@@ -101,7 +112,19 @@ async def miss_command(client, message):
     formatted_links = "\n".join([link[0] for link in src_links])  # Extract URLs from results
     await status_message.edit_text(f"📄 Links fetched:\n\n{formatted_links}", disable_web_page_preview=True)
 
-@app.on_message(filters.command("fetchm"))
+
+@app.on_message(filters.command("crawl"))
+async def miss_command(client, message):
+    if len(message.command) < 3:
+        await message.reply_text("Usage: /crawl [link]\nExample: /crawl https://www.google.com")
+        return
+    link = message.command[1]
+    status_message = await message.reply_text("🔄 Fetching...")
+    result = await simple_crawl(link)
+    await status_message.edit_text(f"📄 Data Fetched:\n\n{result}", disable_web_page_preview=True)
+
+
+@app.on_message(filters.command("fetch"))
 async def fetchm_command(client, message):
     if len(message.command) < 2:
         await message.reply_text("Usage: /Fetchm [link]\nExample: /Fetchm https://missav.com/en/...")
@@ -130,11 +153,11 @@ async def help_command(client, message):
         "🤖 Web Crawler Bot Help\n\n"
         "Commands:\n"
         "/miss [base_url] [pages] - Fetch all links from MissAV pages\n"
-        "/Fetchm [link] - Fetch details for a specific MissAV link\n"
+        "/fetchm [link] - Fetch details for a specific MissAV link\n"
         "/start - Show welcome message\n\n"
         "Examples:\n"
         "/miss https://missav.com/dm561/en/uncensored-leak 2\n"
-        "/Fetchm https://missav.com/en/..."
+        "/fetchm https://missav.com/en/..."
     )
 
 # Run the bot
