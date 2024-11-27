@@ -97,10 +97,11 @@ async def miss_command(client, message):
     base_url, pages = message.command[1], int(message.command[2])
     status_message = await message.reply_text("🔄 Fetching MissAV links...")
     links = await fetch_pages(base_url, end_page=pages)
-    formatted_links = "\n".join([link[1] for link in links])  # Extract URLs from results
+    src_links = [ link.extend(await crawl_missav(link[-1])) for link in links]
+    formatted_links = "\n".join([link[-1] for link in src_links])  # Extract URLs from results
     await status_message.edit_text(f"📄 Links fetched:\n\n{formatted_links}", disable_web_page_preview=True)
 
-@app.on_message(filters.command("Fetchm"))
+@app.on_message(filters.command("fetchm"))
 async def fetchm_command(client, message):
     if len(message.command) < 2:
         await message.reply_text("Usage: /Fetchm [link]\nExample: /Fetchm https://missav.com/en/...")
