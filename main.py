@@ -98,7 +98,7 @@ async def simple_crawl(link):
     async with AsyncWebCrawler() as crawler:
         try:
             result = await crawler.arun(url=link)
-            return result.markdown[4000] if result else None
+            return result.markdown[4000] if result and len(result.markdown) else result.markdown
         except Exception as e:
             logger.error(f"Error crawling {link}: {e}")
             return None
