@@ -155,8 +155,7 @@ async def miss_command(client, message):
         
         telegraph_url = f"https://graph.org/{response['path']}"
         await status_message.edit_text(
-            f"✅ Links fetched! View them here:\n\n{telegraph_url}",
-            disable_web_page_preview=True
+            f"✅ Links fetched! View them here:\n\n{telegraph_url}"
         )
     except Exception as e:
         logger.error(f"Error fetching links: {e}")
