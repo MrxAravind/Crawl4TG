@@ -7,6 +7,8 @@ from crawl4ai import AsyncWebCrawler
 from urllib.parse import urlparse
 from dotenv import load_dotenv
 from telegraph import Telegraph
+import subprocess
+
 
 
 # Configure logging
@@ -174,7 +176,65 @@ async def miss_command(client, message):
 
 
 @app.on_message(filters.command("fetch"))
-async def fetchm_command(client, message):
+async def fetch_command(client, message):
+    if len(message.command) < 2:
+        await message.reply_text("Usage: /fetch [link]\nExample: /fetch https://missav.com/en/...")
+        return
+    
+    link = message.command[1]
+    status_message = await message.reply_text("🔄 Fetching details for the given link...")
+    
+    # Crawl and fetch the video link
+    video_url = await crawl_missav(link)
+    title = "video"  # Default title for the video file
+    if video_url:
+        try:
+            # Define the output file format
+            output_template = os.path.join(os.getcwd(), "downloads", f"{title}.%(ext)s")
+            os.makedirs(os.path.dirname(output_template), exist_ok=True)
+            
+            # Run yt-dlp to download the video
+            command = [
+                "yt-dlp",
+                "--output", output_template,
+                video_url
+            ]
+            
+            await status_message.edit_text("🔄 Downloading the video...")
+            subprocess.run(command, check=True)
+            
+            # Find the downloaded video file
+            downloaded_video = next(
+                (os.path.join("downloads", f) for f in os.listdir("downloads") if f.startswith(title)),
+                None
+            )
+            
+            if downloaded_video and os.path.exists(downloaded_video):
+                # Upload the video back to Telegram
+                await status_message.edit_text("🔼 Uploading the video to Telegram...")
+                await client.send_video(
+                    chat_id=message.chat.id,
+                    video=downloaded_video,
+                    caption="📹 Here is your downloaded video!"
+                )
+                await status_message.delete()
+                
+                # Optional: Clean up the downloaded video file after upload
+                os.remove(downloaded_video)
+            else:
+                await status_message.edit_text("❌ Video download failed. File not found.")
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Error downloading video: {e}")
+            await status_message.edit_text("❌ Failed to download the video. Please check the URL or try again.")
+        except Exception as e:
+            logger.error(f"Error uploading video: {e}")
+            await status_message.edit_text("❌ An error occurred while uploading the video.")
+    else:
+        await status_message.edit_text("❌ No video found for the given link.", disable_web_page_preview=True)
+
+
+@app.on_message(filters.command("rawfetch"))
+async def rawfetch_command(client, message):
     if len(message.command) < 2:
         await message.reply_text("Usage: /Fetchm [link]\nExample: /Fetchm https://missav.com/en/...")
         return
