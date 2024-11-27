@@ -1,6 +1,5 @@
 pyrogram 
 tgcrypto 
-crawl4ai[sync]
 playwright
 crawl4ai
 python-dotenv
