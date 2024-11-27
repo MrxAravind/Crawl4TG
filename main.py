@@ -6,6 +6,8 @@ from pyrogram import Client, filters
 from crawl4ai import AsyncWebCrawler
 from urllib.parse import urlparse
 from dotenv import load_dotenv
+from telegraph import Telegraph
+
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -50,6 +52,9 @@ app = Client(
     api_hash=API_HASH,
     bot_token=BOT_TOKEN
 )
+# Initialize Telegraph
+telegraph = Telegraph()
+telegraph.create_account(short_name="WebCrawlerBot")
 
 crawler = AsyncWebCrawler(database_type="sqlite", database_path=DB_PATH, cache_age=24*60*60)
 
@@ -113,9 +118,54 @@ async def miss_command(client, message):
     await status_message.edit_text(f"📄 Links fetched:\n\n{formatted_links}", disable_web_page_preview=True)
 
 
-@app.on_message(filters.command("crawl"))
+@app.on_message(filters.command("misstg"))
 async def miss_command(client, message):
     if len(message.command) < 3:
+        await message.reply_text(
+            "Usage: /miss [base_url] [pages]\nExample: /miss https://missav.com/dm561/en/uncensored-leak 2"
+        )
+        return
+    
+    base_url, pages = message.command[1], int(message.command[2])
+    status_message = await message.reply_text("🔄 Fetching MissAV links...")
+    
+    try:
+        # Fetch the links and process
+        links = await fetch_pages(base_url, end_page=pages)
+        src_links = [
+            link + [await crawl_missav(link[-1])] for link in links
+        ]
+        
+        # Prepare Telegraph content
+        telegraph_content = ""
+        for i, link in enumerate(src_links):
+            title, img_url, video_url = link[0], link[1], link[2]
+            video_src = link[3] if len(link) > 3 else "N/A"
+            telegraph_content += (
+                f"<h3>{i + 1}. {title}</h3>"
+                f'<img src="{img_url}"/><br>'
+                f'<a href="{video_src}">Watch Video</a><br><br>'
+            )
+
+        # Create and publish Telegraph page
+        response = telegraph.create_page(
+            title="MissAV Links",
+            html_content=telegraph_content
+        )
+        
+        telegraph_url = f"https://telegra.ph/{response['path']}"
+        await status_message.edit_text(
+            f"✅ Links fetched! View them here:\n\n{telegraph_url}",
+            disable_web_page_preview=True
+        )
+    except Exception as e:
+        logger.error(f"Error fetching links: {e}")
+        await status_message.edit_text("❌ Failed to fetch links. Please try again.")
+
+
+@app.on_message(filters.command("crawl"))
+async def miss_command(client, message):
+    if len(message.command) < 2:
         await message.reply_text("Usage: /crawl [link]\nExample: /crawl https://www.google.com")
         return
     link = message.command[1]
