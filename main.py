@@ -15,6 +15,13 @@ import static_ffmpeg
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Suppress Pyrogram logs
+logging.getLogger("pyrogram").setLevel(logging.WARNING)
+
+# Optional: Suppress urllib3 logs (used by Pyrogram for networking)
+logging.getLogger("urllib3").setLevel(logging.WARNING)
+
+
 # Load environment variables
 load_dotenv()
 
