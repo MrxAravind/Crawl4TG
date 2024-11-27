@@ -226,6 +226,7 @@ async def fetch_command(client, message):
     video_url = data[-1]
     title = data[0][25] if data else "video"  # Default title for the video file
     thumb_path = f"{title}.png"
+    await status_message.edit_text(f"🔄 Found the video...\n{title}")
     if video_url:
         try:
             # Define the output file format
@@ -257,7 +258,8 @@ async def fetch_command(client, message):
                 await app.send_video(
                     chat_id=message.chat.id,
                     video=downloaded_video,
-                    caption=f"📹 {data[0]}"
+                    caption=f"📹 {data[0]}",
+                    thumb=thumb_path
                 )
                 await status_message.delete()
                 
