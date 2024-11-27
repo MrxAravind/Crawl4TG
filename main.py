@@ -99,7 +99,7 @@ async def simple_crawl(link):
         try:
             result = await crawler.arun(url=link)
             print(result)
-            return result if result and len(result.markdown) > 4000 else result
+            return result.markdown_v2[4000] if result and len(result.markdown_v2) > 4000 else result.markdown_v2
         except Exception as e:
             logger.error(f"Error crawling {link}: {e}")
             return None
