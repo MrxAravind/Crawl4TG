@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 from telegraph import Telegraph
 import subprocess
 import static_ffmpeg
+from urllib.parse import unquote
 
 
 # Configure logging
@@ -70,6 +71,35 @@ crawler = AsyncWebCrawler(database_type="sqlite", database_path=DB_PATH, cache_a
 static_ffmpeg.add_paths()
 
 
+
+# Generate thumbnail using ffmpeg 
+def generate_thumbnail(video_path, output_path, timestamp="00:00:4"):
+    """Generate a thumbnail from a video using ffmpeg.
+    
+    Args:
+        video_path: Path to input video
+        output_path: Path to save thumbnail
+        timestamp: Time to extract frame (e.g. "00:00:01" or "5")
+    """
+    command = [
+        'ffmpeg',
+        '-ss', str(timestamp),  # Seek to timestamp
+        '-i', video_path,       # Input file
+        '-vframes', '1',        # Extract one frame
+        '-q:v', '2',           # High quality
+        '-y',                  # Overwrite output
+        output_path
+    ]
+    try:
+        subprocess.run(command, check=True, capture_output=True)
+        print(f"Thumbnail saved as {output_path}")
+    except subprocess.CalledProcessError as e:
+        print(f"Error generating thumbnail: {e}")
+
+
+
+
+
 async def fetch_pages(base_url, end_page):
     results = []
     async with AsyncWebCrawler() as crawler:
@@ -95,14 +125,11 @@ async def crawl_missav(link):
     async with AsyncWebCrawler() as crawler:
         try:
             result = await crawler.arun(url=link)
-            videos = [
-                video["src"]
-                for video in result.media.get("videos", [])
-                if video.get("src")
-            ]
-            return videos[0] if videos else None  # Return the first video if available
+            title = [ unquote(i["href"].split("&text=")[-1]).replace("+", " ") for i in result.links["external"] if i["text"] == "Telegram"]
+            videos = [ video["src"] for video in result.media.get("videos", []) if video.get("src") ]
+            return title[0],videos[0] if videos and title else None
         except Exception as e:
-            logger.error(f"Error crawling {link}: {e}")
+            print(f"Error crawling {link}: {e}")
             return None
 
 
@@ -125,7 +152,7 @@ async def miss_command(client, message):
     base_url, pages = message.command[1], int(message.command[2])
     status_message = await message.reply_text("🔄 Fetching MissAV links...")
     links = await fetch_pages(base_url, end_page=pages)
-    src_links = [link + [await crawl_missav(link[-1])] for link in links]
+    src_links = [link + [await crawl_missav(link[-1])[-1]] for link in links]
     formatted_links = "\n".join([f"{i + 1}. {link[0]}" for i, link in enumerate(src_links)])
     await status_message.edit_text(f"📄 Links fetched:\n\n{formatted_links}", disable_web_page_preview=True)
 
@@ -145,7 +172,7 @@ async def miss_command(client, message):
         # Fetch the links and process
         links = await fetch_pages(base_url, end_page=pages)
         src_links = [
-            link + [await crawl_missav(link[-1])] for link in links
+            link + [await crawl_missav(link[-1])[-1]] for link in links
         ]
         
         # Prepare Telegraph content
@@ -195,8 +222,10 @@ async def fetch_command(client, message):
     status_message = await message.reply_text("🔄 Fetching details for the given link...")
     
     # Crawl and fetch the video link
-    video_url = await crawl_missav(link)
-    title = "video"  # Default title for the video file
+    data = await crawl_missav(link)
+    video_url = data[-1]
+    title = data[0][25] if data else "video"  # Default title for the video file
+    thumb_path = f"{title}.png"
     if video_url:
         try:
             # Define the output file format
@@ -211,7 +240,7 @@ async def fetch_command(client, message):
                 video_url
             ]
             
-            await status_message.edit_text("🔄 Downloading the video with aria2c...")
+            await status_message.edit_text("🔄 Downloading the video...")
             subprocess.run(command, check=True)
             
             # Find the downloaded video file
@@ -222,11 +251,13 @@ async def fetch_command(client, message):
             
             if downloaded_video and os.path.exists(downloaded_video):
                 # Upload the video back to Telegram
+                await status_message.edit_text("📷 Generating Thumbnail for the video...")
+                generate_thumbnail(downloaded_video, thumb_path)
                 await status_message.edit_text("🔼 Uploading the video to Telegram...")
                 await app.send_video(
                     chat_id=message.chat.id,
                     video=downloaded_video,
-                    caption="📹 Here is your downloaded video!"
+                    caption=f"📹 {data[0]}"
                 )
                 await status_message.delete()
                 
