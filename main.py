@@ -98,13 +98,13 @@ async def simple_crawl(link):
     async with AsyncWebCrawler() as crawler:
         try:
             result = await crawler.arun(url=link)
+            print(result)
             return result if result and len(result.markdown) > 4000 else result
         except Exception as e:
             logger.error(f"Error crawling {link}: {e}")
             return None
 
 
-# Telegram bot commands
 @app.on_message(filters.command("miss"))
 async def miss_command(client, message):
     if len(message.command) < 3:
@@ -142,8 +142,8 @@ async def miss_command(client, message):
             title, img_url, video_url = link[0], link[1], link[2]
             video_src = link[3] if len(link) > 3 else "N/A"
             telegraph_content += (
-                f"<h3>{i + 1}. {title}</h3>"
                 f'<img src="{img_url}"/><br>'
+                f"<h4>{i + 1}. {title}</h4>"
                 f'<a href="{video_src}">Watch Video</a><br><br>'
             )
 
@@ -153,7 +153,7 @@ async def miss_command(client, message):
             html_content=telegraph_content
         )
         
-        telegraph_url = f"https://telegra.ph/{response['path']}"
+        telegraph_url = f"https://graph.org/{response['path']}"
         await status_message.edit_text(
             f"✅ Links fetched! View them here:\n\n{telegraph_url}",
             disable_web_page_preview=True
