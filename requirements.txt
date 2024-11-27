@@ -3,3 +3,4 @@ tgcrypto
 playwright
 crawl4ai
 python-dotenv
+telegraph
