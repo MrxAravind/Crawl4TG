@@ -154,9 +154,6 @@ async def simple_crawl(link):
             logger.error(f"Error crawling {link}: {e}")
             return None
 
-@app.on_message(filters.command("miss"))
-async def miss_command(client, message):
-    # ... [Previous implementation remains the same] ...
 
 @app.on_message(filters.command("fetch"))
 async def fetch_command(client, message):
