@@ -154,7 +154,6 @@ async def simple_crawl(link):
             logger.error(f"Error crawling {link}: {e}")
             return None
 
-
 @app.on_message(filters.command("fetch"))
 async def fetch_command(client, message):
     if len(message.command) < 2:
@@ -182,41 +181,88 @@ async def fetch_command(client, message):
         output_template = os.path.join(os.getcwd(), "downloads", f"{title}.%(ext)s")
         thumb_path = os.path.join(os.getcwd(), "downloads", f"{title}_thumb.png")
         
-        # Update status
-        await status_message.edit_text("🔄 Downloading the video...")
+        # Modify yt-dlp options to remove max_downloads
+        ydl_opts = {
+            'format': 'best',
+            'outtmpl': output_template,
+            'no_warnings': True,
+            'quiet': True,
+        }
+        
+        # Try multiple status update methods
+        try:
+            await status_message.edit_text("🔄 Downloading the video...")
+        except Exception:
+            # If edit fails, send a new message
+            await status_message.delete()
+            status_message = await message.reply_text("🔄 Downloading the video...")
         
         # Download video
-        downloaded_video = VideoDownloader.download_video(video_url, output_template)
-        
-        if not downloaded_video:
-            await status_message.edit_text("❌ Failed to download video.")
-            return
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(video_url, download=True)
+            
+            # Get the actual downloaded file path
+            if info and 'requested_downloads' in info:
+                downloaded_video = info['requested_downloads'][0]['filepath']
+            else:
+                raise ValueError("No video downloaded")
         
         # Generate thumbnail
-        await status_message.edit_text("📷 Generating Thumbnail...")
-        VideoDownloader.generate_thumbnail(downloaded_video, thumb_path)
+        try:
+            await status_message.edit_text("📷 Generating Thumbnail...")
+        except Exception:
+            status_message = await message.reply_text("📷 Generating Thumbnail...")
+        
+        # Thumbnail generation options
+        thumb_opts = {
+            'writesubtitles': False,
+            'no_warnings': True,
+            'quiet': True,
+            'no_color': True,
+            'outtmpl': thumb_path,
+            'format': 'worst',  # Smallest thumbnail
+            'postprocessors': [{
+                'key': 'FFmpegThumbnailsConvertor',
+                'format': 'png',
+            }]
+        }
+        
+        try:
+            with yt_dlp.YoutubeDL(thumb_opts) as ydl:
+                ydl.download([downloaded_video])
+        except Exception as thumb_error:
+            logger.error(f"Thumbnail generation error: {thumb_error}")
+            thumb_path = None
         
         # Upload video to Telegram
-        await status_message.edit_text("🔼 Uploading the video to Telegram...")
+        try:
+            await status_message.edit_text("🔼 Uploading the video to Telegram...")
+        except Exception:
+            status_message = await message.reply_text("🔼 Uploading the video to Telegram...")
+        
+        # Send video with optional thumbnail
         await app.send_video(
             chat_id=message.chat.id,
             video=downloaded_video,
             caption=f"📹 {title}",
-            thumb=thumb_path
+            thumb=thumb_path if thumb_path and os.path.exists(thumb_path) else None
         )
         
         # Clean up files
         os.remove(downloaded_video)
-        if os.path.exists(thumb_path):
+        if thumb_path and os.path.exists(thumb_path):
             os.remove(thumb_path)
         
+        # Delete status message
         await status_message.delete()
         
     except Exception as e:
         logger.error(f"Error processing video: {e}")
-        await status_message.edit_text("❌ An error occurred while processing the video.")
+        try:
+            await status_message.edit_text("❌ An error occurred while processing the video.")
+        except Exception:
+            await message.reply_text("❌ An error occurred while processing the video.")
 
-# ... [Rest of the previous implementation remains the same] ...
 
 # Run the bot
 if __name__ == "__main__":
