@@ -2,13 +2,13 @@ import os
 import asyncio
 import logging
 import sqlite3
+import subprocess
 from pyrogram import Client, filters
 from crawl4ai import AsyncWebCrawler
 from urllib.parse import urlparse, unquote
 from dotenv import load_dotenv
 from telegraph import Telegraph
 import yt_dlp
-import logging
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -64,38 +64,65 @@ telegraph.create_account(short_name="WebCrawlerBot")
 
 crawler = AsyncWebCrawler(database_type="sqlite", database_path=DB_PATH, cache_age=24*60*60)
 
-class VideoDownloader:
-    @staticmethod
-    def generate_thumbnail(video_path, output_path):
-        """Generate a thumbnail from a video."""
-        ydl_opts = {
-            'writesubtitles': False,
-            'no_warnings': True,
-            'quiet': True,
-            'no_color': True,
-            'outtmpl': output_path,
-            'format': 'worst',  # Smallest thumbnail
-            'postprocessors': [{
-                'key': 'FFmpegThumbnailsConvertor',
-                'format': 'png',
-            }]
-        }
+def generate_thumbnail(video_path, output_path, timestamp="00:00:04"):
+    """
+    Generate a thumbnail from a video using FFmpeg.
+    
+    Args:
+        video_path (str): Path to input video
+        output_path (str): Path to save thumbnail
+        timestamp (str, optional): Time to extract frame. Defaults to "00:00:04".
+    
+    Returns:
+        bool: True if thumbnail generation was successful, False otherwise
+    """
+    # Ensure the output directory exists
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    
+    # FFmpeg command to extract thumbnail
+    command = [
+        'ffmpeg',
+        '-ss', timestamp,      # Seek to timestamp
+        '-i', video_path,      # Input file
+        '-vframes', '1',       # Extract one frame
+        '-q:v', '2',           # High quality
+        '-y',                  # Overwrite output
+        output_path            # Output path
+    ]
+    
+    try:
+        # Run FFmpeg command
+        result = subprocess.run(
+            command, 
+            check=True, 
+            capture_output=True, 
+            text=True
+        )
         
-        try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                ydl.download([video_path])
+        # Verify thumbnail was created
+        if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+            print(f"Thumbnail saved as {output_path}")
             return True
-        except Exception as e:
-            logger.error(f"Thumbnail generation error: {e}")
+        else:
+            print("Thumbnail generation failed: Output file is empty")
             return False
+    
+    except subprocess.CalledProcessError as e:
+        print(f"FFmpeg Error: {e}")
+        print(f"STDOUT: {e.stdout}")
+        print(f"STDERR: {e.stderr}")
+        return False
+    except Exception as e:
+        print(f"Unexpected error generating thumbnail: {e}")
+        return False
 
+class VideoDownloader:
     @staticmethod
     def download_video(video_url, output_template):
         """Download video using yt-dlp."""
         ydl_opts = {
             'format': 'best',
             'outtmpl': output_template,
-            'max_downloads': 1,
             'no_warnings': True,
             'quiet': True,
         }
@@ -154,6 +181,18 @@ async def simple_crawl(link):
             logger.error(f"Error crawling {link}: {e}")
             return None
 
+@app.on_message(filters.command("miss"))
+async def miss_command(client, message):
+    if len(message.command) < 3:
+        await message.reply_text("Usage: /miss [base_url] [pages]\nExample: /miss https://missav.com/dm561/en/uncensored-leak 2")
+        return
+    base_url, pages = message.command[1], int(message.command[2])
+    status_message = await message.reply_text("🔄 Fetching MissAV links...")
+    links = await fetch_pages(base_url, end_page=pages)
+    src_links = [link + [await crawl_missav(link[-1])[-1]] for link in links]
+    formatted_links = "\n".join([f"{i + 1}. {link[0]}" for i, link in enumerate(src_links)])
+    await status_message.edit_text(f"📄 Links fetched:\n\n{formatted_links}", disable_web_page_preview=True)
+
 @app.on_message(filters.command("fetch"))
 async def fetch_command(client, message):
     if len(message.command) < 2:
@@ -181,14 +220,6 @@ async def fetch_command(client, message):
         output_template = os.path.join(os.getcwd(), "downloads", f"{title}.%(ext)s")
         thumb_path = os.path.join(os.getcwd(), "downloads", f"{title}_thumb.png")
         
-        # Modify yt-dlp options to remove max_downloads
-        ydl_opts = {
-            'format': 'best',
-            'outtmpl': output_template,
-            'no_warnings': True,
-            'quiet': True,
-        }
-        
         # Try multiple status update methods
         try:
             await status_message.edit_text("🔄 Downloading the video...")
@@ -198,14 +229,11 @@ async def fetch_command(client, message):
             status_message = await message.reply_text("🔄 Downloading the video...")
         
         # Download video
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(video_url, download=True)
-            
-            # Get the actual downloaded file path
-            if info and 'requested_downloads' in info:
-                downloaded_video = info['requested_downloads'][0]['filepath']
-            else:
-                raise ValueError("No video downloaded")
+        downloaded_video = VideoDownloader.download_video(video_url, output_template)
+        
+        if not downloaded_video:
+            await status_message.edit_text("❌ Failed to download video.")
+            return
         
         # Generate thumbnail
         try:
@@ -213,26 +241,8 @@ async def fetch_command(client, message):
         except Exception:
             status_message = await message.reply_text("📷 Generating Thumbnail...")
         
-        # Thumbnail generation options
-        thumb_opts = {
-            'writesubtitles': False,
-            'no_warnings': True,
-            'quiet': True,
-            'no_color': True,
-            'outtmpl': thumb_path,
-            'format': 'worst',  # Smallest thumbnail
-            'postprocessors': [{
-                'key': 'FFmpegThumbnailsConvertor',
-                'format': 'png',
-            }]
-        }
-        
-        try:
-            with yt_dlp.YoutubeDL(thumb_opts) as ydl:
-                ydl.download([downloaded_video])
-        except Exception as thumb_error:
-            logger.error(f"Thumbnail generation error: {thumb_error}")
-            thumb_path = None
+        # Generate thumbnail using FFmpeg
+        thumbnail_success = generate_thumbnail(downloaded_video, thumb_path)
         
         # Upload video to Telegram
         try:
@@ -245,12 +255,12 @@ async def fetch_command(client, message):
             chat_id=message.chat.id,
             video=downloaded_video,
             caption=f"📹 {title}",
-            thumb=thumb_path if thumb_path and os.path.exists(thumb_path) else None
+            thumb=thumb_path if thumbnail_success and os.path.exists(thumb_path) else None
         )
         
         # Clean up files
         os.remove(downloaded_video)
-        if thumb_path and os.path.exists(thumb_path):
+        if thumbnail_success and os.path.exists(thumb_path):
             os.remove(thumb_path)
         
         # Delete status message
@@ -263,6 +273,41 @@ async def fetch_command(client, message):
         except Exception:
             await message.reply_text("❌ An error occurred while processing the video.")
 
+@app.on_message(filters.command("rawfetch"))
+async def rawfetch_command(client, message):
+    if len(message.command) < 2:
+        await message.reply_text("Usage: /Fetchm [link]\nExample: /Fetchm https://missav.com/en/...")
+        return
+    link = message.command[1]
+    status_message = await message.reply_text("🔄 Fetching details for the given link...")
+    video = await crawl_missav(link)
+    if video:
+        await status_message.edit_text(f"📄 Video URL:\n{video}", disable_web_page_preview=True)
+    else:
+        await status_message.edit_text("❌ No video found for the given link.", disable_web_page_preview=True)
+
+@app.on_message(filters.command("start"))
+async def start_command(client, message):
+    await message.reply_text(
+        "👋 Welcome to the Web Crawler Bot!\n\n"
+        "Commands:\n"
+        "/miss [base_url] [pages] - Fetch all links from MissAV pages\n"
+        "/fetch [link] - Fetch and download a video from a MissAV link\n"
+        "/help - Show this help message"
+    )
+
+@app.on_message(filters.command("help"))
+async def help_command(client, message):
+    await message.reply_text(
+        "🤖 Web Crawler Bot Help\n\n"
+        "Commands:\n"
+        "/miss [base_url] [pages] - Fetch all links from MissAV pages\n"
+        "/fetch [link] - Fetch and download a video from a MissAV link\n"
+        "/start - Show welcome message\n\n"
+        "Examples:\n"
+        "/miss https://missav.com/dm561/en/uncensored-leak 2\n"
+        "/fetch https://missav.com/en/..."
+    )
 
 # Run the bot
 if __name__ == "__main__":
