@@ -2,21 +2,21 @@ import os
 import asyncio
 import logging
 import sqlite3
-import subprocess
 from pyrogram import Client, filters
 from crawl4ai import AsyncWebCrawler
 from urllib.parse import urlparse, unquote
 from dotenv import load_dotenv
 from telegraph import Telegraph
-import yt_dlp
+import subprocess
+import static_ffmpeg
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Suppress Pyrogram and yt-dlp logs
+# Suppress Pyrogram logs
 logging.getLogger("pyrogram").setLevel(logging.WARNING)
-logging.getLogger("yt_dlp").setLevel(logging.WARNING)
+logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 # Load environment variables
 load_dotenv()
@@ -30,6 +30,7 @@ if not all([API_ID, API_HASH, BOT_TOKEN]):
 
 DB_PATH = os.path.join(os.getcwd(), 'crawler_cache', 'crawler_cache.db')
 
+# Initialize the database
 def initialize_database(db_path):
     try:
         os.makedirs(os.path.dirname(db_path), exist_ok=True)
@@ -51,95 +52,36 @@ def initialize_database(db_path):
 
 initialize_database(DB_PATH)
 
+# Initialize Telegram client and tools
 app = Client(
     "web_crawler_bot",
     api_id=int(API_ID),
     api_hash=API_HASH,
     bot_token=BOT_TOKEN
 )
-
-# Initialize Telegraph
 telegraph = Telegraph()
 telegraph.create_account(short_name="WebCrawlerBot")
-
 crawler = AsyncWebCrawler(database_type="sqlite", database_path=DB_PATH, cache_age=24*60*60)
+static_ffmpeg.add_paths()
 
-def generate_thumbnail(video_path, output_path, timestamp="00:00:04"):
-    """
-    Generate a thumbnail from a video using FFmpeg.
-    
-    Args:
-        video_path (str): Path to input video
-        output_path (str): Path to save thumbnail
-        timestamp (str, optional): Time to extract frame. Defaults to "00:00:04".
-    
-    Returns:
-        bool: True if thumbnail generation was successful, False otherwise
-    """
-    # Ensure the output directory exists
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    
-    # FFmpeg command to extract thumbnail
+# Utility: Generate thumbnail
+def generate_thumbnail(video_path, output_path, timestamp="00:00:4"):
     command = [
         'ffmpeg',
-        '-ss', timestamp,      # Seek to timestamp
-        '-i', video_path,      # Input file
-        '-vframes', '1',       # Extract one frame
-        '-q:v', '2',           # High quality
-        '-y',                  # Overwrite output
-        output_path            # Output path
+        '-ss', str(timestamp),
+        '-i', video_path,
+        '-vframes', '1',
+        '-q:v', '2',
+        '-y',
+        output_path
     ]
-    
     try:
-        # Run FFmpeg command
-        result = subprocess.run(
-            command, 
-            check=True, 
-            capture_output=True, 
-            text=True
-        )
-        
-        # Verify thumbnail was created
-        if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
-            print(f"Thumbnail saved as {output_path}")
-            return True
-        else:
-            print("Thumbnail generation failed: Output file is empty")
-            return False
-    
+        subprocess.run(command, check=True, capture_output=True)
+        print(f"Thumbnail saved as {output_path}")
     except subprocess.CalledProcessError as e:
-        print(f"FFmpeg Error: {e}")
-        print(f"STDOUT: {e.stdout}")
-        print(f"STDERR: {e.stderr}")
-        return False
-    except Exception as e:
-        print(f"Unexpected error generating thumbnail: {e}")
-        return False
+        print(f"Error generating thumbnail: {e}")
 
-class VideoDownloader:
-    @staticmethod
-    def download_video(video_url, output_template):
-        """Download video using yt-dlp."""
-        ydl_opts = {
-            'format': 'best',
-            'outtmpl': output_template,
-            'no_warnings': True,
-            'quiet': True,
-        }
-        
-        try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(video_url, download=True)
-                
-            # Get the actual downloaded file path
-            if info and 'requested_downloads' in info:
-                downloaded_file = info['requested_downloads'][0]['filepath']
-                return downloaded_file
-            return None
-        except Exception as e:
-            logger.error(f"Video download error: {e}")
-            return None
-
+# Async function to fetch pages
 async def fetch_pages(base_url, end_page):
     results = []
     async with AsyncWebCrawler() as crawler:
@@ -152,7 +94,7 @@ async def fetch_pages(base_url, end_page):
                     exclude_social_media_links=True,
                 )
                 videos = [
-                    [img["alt"],img["src"], f"https://missav.com/en/{img['src'].split('/')[-2]}"]
+                    [img["alt"], img["src"], f"https://missav.com/en/{img['src'].split('/')[-2]}"]
                     for img in result.media.get("images", [])
                     if img["src"] and "flag" not in img["src"]
                 ]
@@ -161,26 +103,29 @@ async def fetch_pages(base_url, end_page):
                 logger.error(f"Error analyzing {url}: {e}")
     return results
 
+# Crawl individual MissAV links
 async def crawl_missav(link):
     async with AsyncWebCrawler() as crawler:
         try:
             result = await crawler.arun(url=link)
-            title = [ unquote(i["href"].split("&text=")[-1]).replace("+", " ") for i in result.links["external"] if i["text"] == "Telegram"]
-            videos = [ video["src"] for video in result.media.get("videos", []) if video.get("src") ]
+            title = [unquote(i["href"].split("&text=")[-1]).replace("+", " ") for i in result.links["external"] if i["text"] == "Telegram"]
+            videos = [video["src"] for video in result.media.get("videos", []) if video.get("src")]
             return title[0], videos[0] if videos and title else None
         except Exception as e:
             print(f"Error crawling {link}: {e}")
             return None
 
+# General crawl function for any link
 async def simple_crawl(link):
     async with AsyncWebCrawler() as crawler:
         try:
             result = await crawler.arun(url=link)
-            return result.markdown_v2[4000] if result and len(result.markdown_v2) > 4000 else result.markdown_v2
+            return result.markdown_v2[:4000] if result and len(result.markdown_v2) > 4000 else result.markdown_v2
         except Exception as e:
             logger.error(f"Error crawling {link}: {e}")
             return None
 
+# Command: Fetch MissAV links from pages
 @app.on_message(filters.command("miss"))
 async def miss_command(client, message):
     if len(message.command) < 3:
@@ -189,89 +134,131 @@ async def miss_command(client, message):
     base_url, pages = message.command[1], int(message.command[2])
     status_message = await message.reply_text("🔄 Fetching MissAV links...")
     links = await fetch_pages(base_url, end_page=pages)
-    src_links = [link + [await crawl_missav(link[-1])[-1]] for link in links]
-    formatted_links = "\n".join([f"{i + 1}. {link[0]}" for i, link in enumerate(src_links)])
+    formatted_links = "\n".join([f"{i + 1}. {link[0]}" for i, link in enumerate(links)])
     await status_message.edit_text(f"📄 Links fetched:\n\n{formatted_links}", disable_web_page_preview=True)
 
+
+
+@app.on_message(filters.command("misstg"))
+async def miss_command(client, message):
+    if len(message.command) < 3:
+        await message.reply_text(
+            "Usage: /miss [base_url] [pages]\nExample: /miss https://missav.com/dm561/en/uncensored-leak 2"
+        )
+        return
+    
+    base_url, pages = message.command[1], int(message.command[2])
+    status_message = await message.reply_text("🔄 Fetching MissAV links...")
+    
+    try:
+        # Fetch the links and process
+        links = await fetch_pages(base_url, end_page=pages)
+        src_links = [
+            link + [await crawl_missav(link[-1])[-1]] for link in links
+        ]
+        
+        # Prepare Telegraph content
+        telegraph_content = ""
+        for i, link in enumerate(src_links):
+            title, img_url, video_url = link[0], link[1], link[2]
+            video_src = link[3] if len(link) > 3 else "N/A"
+            telegraph_content += (
+                f'<img src="{img_url}"/><br>'
+                f"<h4>{i + 1}. {title}</h4>"
+                f'<a href="{video_src}">Watch Video</a><br><br>'
+            )
+
+        # Create and publish Telegraph page
+        response = telegraph.create_page(
+            title="MissAV Links",
+            html_content=telegraph_content
+        )
+        
+        telegraph_url = f"https://graph.org/{response['path']}"
+        await status_message.edit_text(
+            f"✅ Links fetched! View them here:\n\n{telegraph_url}"
+        )
+    except Exception as e:
+        logger.error(f"Error fetching links: {e}")
+        await status_message.edit_text("❌ Failed to fetch links. Please try again.")
+
+
+# Command: Crawl any specific link
+@app.on_message(filters.command("crawl"))
+async def crawl_command(client, message):
+    if len(message.command) < 2:
+        await message.reply_text("Usage: /crawl [link]\nExample: /crawl https://www.google.com")
+        return
+    link = message.command[1]
+    status_message = await message.reply_text("🔄 Fetching...")
+    result = await simple_crawl(link)
+    await status_message.edit_text(f"📄 Data Fetched:\n\n{result}", disable_web_page_preview=True)
+
+# Command: Fetch video and upload
 @app.on_message(filters.command("fetch"))
 async def fetch_command(client, message):
     if len(message.command) < 2:
         await message.reply_text("Usage: /fetch [link]\nExample: /fetch https://missav.com/en/...")
         return
-    
     link = message.command[1]
     status_message = await message.reply_text("🔄 Fetching details for the given link...")
     
-    # Crawl and fetch the video link
     data = await crawl_missav(link)
-    
-    if not data or not data[1]:
+    if not data:
         await status_message.edit_text("❌ No video found for the given link.", disable_web_page_preview=True)
         return
     
-    video_url = data[1]
-    title = data[0][:50] if data[0] else "video"  # Truncate title to prevent filename issues
+    title, video_url = data
+    title = title[:25] if len(title) > 25 else title  # Truncate long titles
+    thumb_path = f"{title}.png"
     
     try:
-        # Create downloads directory if it doesn't exist
-        os.makedirs(os.path.join(os.getcwd(), "downloads"), exist_ok=True)
-        
-        # Prepare file paths
         output_template = os.path.join(os.getcwd(), "downloads", f"{title}.%(ext)s")
-        thumb_path = os.path.join(os.getcwd(), "downloads", f"{title}_thumb.png")
+        os.makedirs(os.path.dirname(output_template), exist_ok=True)
         
-        # Try multiple status update methods
-        try:
-            await status_message.edit_text("🔄 Downloading the video...")
-        except Exception:
-            # If edit fails, send a new message
-            await status_message.delete()
-            status_message = await message.reply_text("🔄 Downloading the video...")
+        # Run yt-dlp with aria2c as the external downloader
+        command = [
+            "yt-dlp",
+            "--external-downloader", "aria2c",
+            "--output", output_template,
+            video_url
+        ]
         
-        # Download video
-        downloaded_video = VideoDownloader.download_video(video_url, output_template)
+        await status_message.edit_text("🔄 Downloading the video...")
+        subprocess.run(command, check=True)
         
-        if not downloaded_video:
-            await status_message.edit_text("❌ Failed to download video.")
-            return
-        
-        # Generate thumbnail
-        try:
-            await status_message.edit_text("📷 Generating Thumbnail...")
-        except Exception:
-            status_message = await message.reply_text("📷 Generating Thumbnail...")
-        
-        # Generate thumbnail using FFmpeg
-        thumbnail_success = generate_thumbnail(downloaded_video, thumb_path)
-        
-        # Upload video to Telegram
-        try:
-            await status_message.edit_text("🔼 Uploading the video to Telegram...")
-        except Exception:
-            status_message = await message.reply_text("🔼 Uploading the video to Telegram...")
-        
-        # Send video with optional thumbnail
-        await app.send_video(
-            chat_id=message.chat.id,
-            video=downloaded_video,
-            caption=f"📹 {title}",
-            thumb=thumb_path if thumbnail_success and os.path.exists(thumb_path) else None
+        # Locate the downloaded video file
+        downloaded_video = next(
+            (os.path.join("downloads", f) for f in os.listdir("downloads") if f.startswith(title)),
+            None
         )
         
-        # Clean up files
-        os.remove(downloaded_video)
-        if thumbnail_success and os.path.exists(thumb_path):
-            os.remove(thumb_path)
-        
-        # Delete status message
-        await status_message.delete()
-        
+        if downloaded_video and os.path.exists(downloaded_video):
+            await status_message.edit_text("📷 Generating Thumbnail for the video...")
+            generate_thumbnail(downloaded_video, thumb_path)
+            
+            await status_message.edit_text("🔼 Uploading the video to Telegram...")
+            await app.send_video(
+                chat_id=message.chat.id,
+                video=downloaded_video,
+                caption=f"📹 {title}",
+                thumb=thumb_path
+            )
+            await status_message.delete()
+            
+            # Clean up after upload
+            os.remove(downloaded_video)
+        else:
+            await status_message.edit_text("❌ Video download failed. File not found.")
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Error downloading video: {e}")
+        await status_message.edit_text("❌ Failed to download the video. Please check the URL or try again.")
     except Exception as e:
-        logger.error(f"Error processing video: {e}")
-        try:
-            await status_message.edit_text("❌ An error occurred while processing the video.")
-        except Exception:
-            await message.reply_text("❌ An error occurred while processing the video.")
+        logger.error(f"Error uploading video: {e}")
+        await status_message.edit_text("❌ An error occurred while uploading the video.")
+
+
+
 
 @app.on_message(filters.command("rawfetch"))
 async def rawfetch_command(client, message):
@@ -285,16 +272,21 @@ async def rawfetch_command(client, message):
         await status_message.edit_text(f"📄 Video URL:\n{video}", disable_web_page_preview=True)
     else:
         await status_message.edit_text("❌ No video found for the given link.", disable_web_page_preview=True)
+        
 
+
+# Command: Start message
 @app.on_message(filters.command("start"))
 async def start_command(client, message):
     await message.reply_text(
         "👋 Welcome to the Web Crawler Bot!\n\n"
         "Commands:\n"
         "/miss [base_url] [pages] - Fetch all links from MissAV pages\n"
-        "/fetch [link] - Fetch and download a video from a MissAV link\n"
-        "/help - Show this help message"
+        "/crawl [link] - Crawls any link\n"
+        "/fetch [link] - Fetch video from link and upload to Telegram\n"
+        "/start - Show this welcome message\n"
     )
+
 
 @app.on_message(filters.command("help"))
 async def help_command(client, message):
@@ -302,13 +294,13 @@ async def help_command(client, message):
         "🤖 Web Crawler Bot Help\n\n"
         "Commands:\n"
         "/miss [base_url] [pages] - Fetch all links from MissAV pages\n"
-        "/fetch [link] - Fetch and download a video from a MissAV link\n"
+        "/fetchm [link] - Fetch details for a specific MissAV link\n"
         "/start - Show welcome message\n\n"
         "Examples:\n"
         "/miss https://missav.com/dm561/en/uncensored-leak 2\n"
-        "/fetch https://missav.com/en/..."
+        "/fetchm https://missav.com/en/..."
     )
-
+    
 # Run the bot
 if __name__ == "__main__":
     print("Bot is running...")
