@@ -194,6 +194,26 @@ async def crawl_command(client, message):
     result = await simple_crawl(link)
     await status_message.edit_text(f"📄 Data Fetched:\n\n{result}", disable_web_page_preview=True)
 
+
+
+
+@app.on_message(filters.command("linkfetch"))
+async def fetch_command(client, message):
+    if len(message.command) < 2:
+        await message.reply_text("Usage: /fetch [link]\nExample: /fetch https://missav.com/en/...")
+        return
+    link = message.command[1]
+    status_message = await message.reply_text("🔄 Fetching details for the given link...")
+    
+    data = await crawl_missav(link)
+    if not data:
+        await status_message.edit_text("❌ No video found for the given link.", disable_web_page_preview=True)
+        return
+    else:
+        await status_message.edit_text(f"Title: {data[-1]}\nUrl: {data[-1]}", disable_web_page_preview=True)
+        return 
+
+
 # Command: Fetch video and upload
 @app.on_message(filters.command("fetch"))
 async def fetch_command(client, message):
