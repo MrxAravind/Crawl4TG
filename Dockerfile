@@ -14,7 +14,7 @@ WORKDIR /app
 
 COPY requirements.txt .
 
-RUN pip3 install --no-cache-dir -r requirements.txt --break-system-packages
+RUN pip3 install --no-cache-dir -r requirements.txt
 RUN crawl4ai-setup
 RUN playwright install-deps 
 
