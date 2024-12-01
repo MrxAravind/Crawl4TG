@@ -266,8 +266,8 @@ async def miss_command(client, message):
 
 
 @app.on_message(filters.command("mojtg"))
-async def miss_command(client, message):
-    if len(message.command) < 3:
+async def moj_command(client, message):
+    if len(message.command) < 2:
         await message.reply_text(
             "Usage: /mojtg [pages]\nExample: /mojtg 2"
         )
