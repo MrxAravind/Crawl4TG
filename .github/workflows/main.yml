@@ -17,7 +17,7 @@ jobs:
           python-version: '3.10'
       - name: Install dependencies
         run: |
-          docker pull unclecode/crawl4ai:basic-arm64
-          docker run -p 11235:11235 unclecode/crawl4ai:basic-arm64
+          docker pull unclecode/crawl4ai:basic-amd64
+          docker run -p 11235:11235 unclecode/crawl4ai:basic-amd64
           curl http://localhost:11235/health
           
