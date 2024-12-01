@@ -1,0 +1,16 @@
+name: Analysis
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 */7 * * *'
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Building Image
+        run:  docker build -t bot .
+      - name: Running Image
+        run:  docker run bot
