@@ -155,7 +155,8 @@ async def miss_command(client, message):
         links = await fetch_pages(base_url, end_page=pages)
         src_links = []
         for link in links:
-            src = await crawl_missav(link[-1])[-1]
+            src_result = await crawl_missav(link[-1])  # Await the coroutine
+            src = src_result[-1]  # Access the last element of the returned result
             link.append(src)
             src_links.append(link)
         # Prepare Telegraph content
@@ -211,7 +212,7 @@ async def fetch_command(client, message):
         await status_message.edit_text("❌ No video found for the given link.", disable_web_page_preview=True)
         return
     else:
-        await status_message.edit_text(f"Title: {data[-1]}\nUrl: {data[-1]}", disable_web_page_preview=True)
+        await status_message.edit_text(f"Title: {data[0]}\nUrl: {data[-1]}")
         return 
 
 
@@ -230,7 +231,7 @@ async def fetch_command(client, message):
         return
     
     title, video_url = data
-    title = title[:25] if len(title) > 25 else title  # Truncate long titles
+    title = title.split()[0] if len(title) > 25 else title  # Truncate long titles
     thumb_path = f"{title}.png"
     
     try:
