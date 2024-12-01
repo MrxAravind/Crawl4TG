@@ -25,4 +25,4 @@ COPY *.sh ./
 COPY .env ./
 
 # Command to run your application (adjust as necessary)
-CMD ["python3", "run.py"]
+CMD ["python3", "app.py"]
