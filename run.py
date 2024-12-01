@@ -28,10 +28,10 @@ async def main():
                 link = f"https://missav.com/en/{img.split('/')[-2]}"
                 title,link = await crawl_missav(link)
                 if title.split()[0].replace("-","") == name:
-                    #print(f"Title: {title}")
-                    #print(f"Code: {name}")
-                    #print(f"Thumb: {image['src']}")
-                    #print(f"Link: {link}")
+                    print(f"Title: {title}")
+                    print(f"Code: {name}")
+                    print(f"Thumb: {image['src']}")
+                    print(f"Link: {link}")
                     data.append({'Title':title,'Code':name,'Image':image['src'],'Source':link})
         
 if __name__ == "__main__":
