@@ -35,4 +35,4 @@ async def main():
                     data.append({'Title':title,'Code':name,'Image':image['src'],'Source':link})
         
 if __name__ == "__main__":
-    await main()
+    asyncio.run(main())
