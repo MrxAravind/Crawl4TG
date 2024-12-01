@@ -18,6 +18,6 @@ jobs:
       - name: Install dependencies
         run: |
           docker pull unclecode/crawl4ai:basic-amd64
-          docker run -p 11235:11235 unclecode/crawl4ai:basic-amd64
+          docker run -d -p 11235:11235 unclecode/crawl4ai:basic-amd64
           curl http://localhost:11235/health
           
