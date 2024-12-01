@@ -26,13 +26,13 @@ async def main():
           vids = [img['src'] for img in vid.media["images"] if img['src'].startswith("https://fivetiu.com")]
           for img in vids:
                 link = f"https://missav.com/en/{img.split('/')[-2]}"
-                title,link = await crawl_missav(link)
+                title,src = await crawl_missav(link)
                 if title.split()[0].replace("-","") == name:
                     print(f"Title: {title}")
                     print(f"Code: {name}")
                     print(f"Thumb: {image['src']}")
-                    print(f"Link: {link}")
-                    data.append({'Title':title,'Code':name,'Image':image['src'],'Source':link})
+                    print(f"Link: {src}")
+                    data.append({'Title':title,'Code':name,'Image':image['src'],'Source':src})
         
 if __name__ == "__main__":
     asyncio.run(main())
