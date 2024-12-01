@@ -6,12 +6,10 @@ import asyncio
 import logging
 import sqlite3
 from pyrogram import Client, filters
-from crawl4ai import AsyncWebCrawler
 from urllib.parse import urlparse, unquote
 from dotenv import load_dotenv
 from telegraph import Telegraph
 import subprocess
-import static_ffmpeg
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -65,7 +63,7 @@ app = Client(
 telegraph = Telegraph()
 telegraph.create_account(short_name="WebCrawlerBot")
 crawler = AsyncWebCrawler(database_type="sqlite", database_path=DB_PATH, cache_age=24*60*60)
-static_ffmpeg.add_paths()
+
 
 # Utility: Generate thumbnail
 def generate_thumbnail(video_path, output_path, timestamp="00:00:4"):
