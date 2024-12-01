@@ -19,7 +19,7 @@ async def crawl_missav(link):
 async def main():
     async with AsyncWebCrawler() as crawler:
         data = []
-        result = await crawler.arun(url="https://onejav.com/popular/")
+        result = await crawler.arun(url="https://onejav.com/")
         for image in result.media["images"][:30]:
           name = image['desc'].split()[0]
           vid = await crawler.arun(url=f"https://missav.com/en/search/{name}")
@@ -27,6 +27,7 @@ async def main():
           for img in vids:
                 link = f"https://missav.com/en/{img.split('/')[-2]}"
                 title,src = await crawl_missav(link)
+                print(title,src)
                 if title.split()[0].replace("-","") == name:
                     print(f"Title: {title}")
                     print(f"Code: {name}")
