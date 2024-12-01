@@ -153,10 +153,11 @@ async def miss_command(client, message):
     try:
         # Fetch the links and process
         links = await fetch_pages(base_url, end_page=pages)
-        src_links = [
-            link + [await crawl_missav(link[-1])[-1]] for link in links
-        ]
-        
+        src_links = []
+        for link in links:
+            src = await crawl_missav(link[-1])[-1]
+            link.append(src)
+            src_links.append(link)
         # Prepare Telegraph content
         telegraph_content = ""
         for i, link in enumerate(src_links):
