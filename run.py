@@ -266,27 +266,27 @@ async def miss_command(client, message):
 @app.on_message(filters.command("mojtg"))
 async def moj_command(client, message):
     if len(message.command) < 2:
-        await message.reply_text(
-            "Usage: /mojtg [pages]\nExample: /mojtg 2"
-        )
+        await message.reply_text("Usage: /mojtg [pages]\nExample: /mojtg 2")
         return
-    
-    pages = int(message.command[1])
-    status_message = await message.reply_text("🔄 Fetching OneJav links...")
-    base_url = "https://onejav.com/"
+
     try:
-        # Fetch the links and process
-        links = await moj() #Soon Add Pages
-        src_links = []
-        for link in links:
-            src_result = await crawl_missav(link[-1])  # Await the coroutine
-            src = src_result[-1]  # Access the last element of the returned result
-            link.append(src)
-            src_links.append(link)
-        # Prepare Telegraph content
+        # Parse input
+        pages = int(message.command[1])
+        base_url = "https://onejav.com/"
+        status_message = await message.reply_text("🔄 Fetching OneJav links...")
+
+        # Fetch data using moj function
+        links = await moj()  # Modify `moj` function to accept pages if needed
+
+        # Check if links are found
+        if not links:
+            await status_message.edit_text("❌ No links found. Try again later.")
+            return
+
+        # Process links for Telegraph
         telegraph_content = ""
-        for i, link in enumerate(src_links):
-            title,code,img_url, video_url = link[0], link[1], link[2],link[3]
+        for i, link in enumerate(links):
+            title, code, img_url, video_url = link[0], link[1], link[2], link[3]
             telegraph_content += (
                 f'<img src="{img_url}"/><br>'
                 f"<h4>{i + 1}. {code}</h4>"
@@ -294,21 +294,21 @@ async def moj_command(client, message):
                 f'<a href="{video_url}">Watch Video</a><br><br>'
             )
 
-
-        # Create and publish Telegraph page
+        # Create Telegraph page
         response = telegraph.create_page(
             title="OneJav Links",
             html_content=telegraph_content
         )
-        
         telegraph_url = f"https://graph.org/{response['path']}"
-        await status_message.edit_text(
-            f"✅ Links fetched! View them here:\n\n{telegraph_url}"
-        )
-    except Exception as e:
-        logger.error(f"Error fetching links: {e}")
-        await status_message.edit_text("❌ Failed to fetch links. Please try again.")
 
+        # Reply with the Telegraph link
+        await status_message.edit_text(f"✅ Links fetched! View them here:\n\n{telegraph_url}")
+
+    except ValueError:
+        await message.reply_text("❌ Invalid number of pages. Please provide a valid integer.")
+    except Exception as e:
+        logger.error(f"Error in /mojtg command: {e}")
+        await message.reply_text("❌ An error occurred while processing your request.")
 
 # Command: Crawl any specific link
 @app.on_message(filters.command("crawl"))
