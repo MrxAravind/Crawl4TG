@@ -388,9 +388,8 @@ async def fetch_command(client, message):
             await app.send_video(
                 chat_id=message.chat.id,
                 video=downloaded_video,
-                caption=f"📹{title}",
-                thumb=thumb_path,
-                caption=name
+                caption=f"📹{name}",
+                thumb=thumb_path
             )
             await status_message.delete()
             
