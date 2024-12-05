@@ -83,81 +83,89 @@ def generate_thumbnail(video_path, output_path, timestamp="00:00:4"):
         print(f"Error generating thumbnail: {e}")
 
 
-async def crawl_missav(link):
-    """
-    Crawls a specific missav link to extract the title and video source.
-    """
-    try:
-        async with AsyncWebCrawler() as crawler:
-            result = await crawler.arun(url=link)
-            title = [
-                unquote(i["href"].split("&text=")[-1]).replace("+", " ")
-                for i in result.links.get("external", [])
-                if i["text"] == "Telegram"
-            ]
-            videos = [
-                video["src"]
-                for video in result.media.get("videos", [])
-                if video.get("src")
-            ]
-            return title[0] if title else None, videos[0] if videos else None
-    except Exception as e:
-        print(f"Error while crawling link {link}: {e}", exc_info=True)
-        return None, None
-
-
 async def moj():
     async with AsyncWebCrawler() as crawler:
-        seen = set()
+        seen = set()  # Track processed links
         data = []
-
         try:
-            # Crawl onejav.com to get initial data
             result = await crawler.arun(url="https://onejav.com/")
             images = result.media.get("images", [])[:30]
+
             if not images:
-                print("No images found on onejav.com")
+                logger.warning("No images found on onejav.com.")
                 return
-            for image in images:
+            logger.info(f"Found {len(images)} images to process.")
+            # Step 2: Process each image for related MissAV links
+            async def process_image(image):
                 try:
+                    # Extract name and construct MissAV search URL
                     name = image.get("desc", "").split()[0]
                     if not name:
-                        print(f"Skipping image with missing description: {image}")
-                        continue
+                        logger.debug("Skipping image with missing description.")
+                        return None
+
                     search_url = f"https://missav.com/en/search/{name}"
                     search_result = await crawler.arun(url=search_url)
+
+                    # Find video links in MissAV search results
                     vids = [
-                        img["src"]
-                        for img in search_result.media.get("images", [])
+                        img["src"] for img in search_result.media.get("images", [])
                         if img["src"].startswith("https://fivetiu.com")
                     ]
                     if not vids:
-                        print(f"No videos found for search term {name}")
-                        continue
-                    # Process each video link
-                    for img in vids:
-                        link = f"https://missav.com/en/{img.split('/')[-2]}"
-                        if link in seen:
-                            print(f"Skipping already processed link: {link}")
-                            continue
-                        seen.add(link)
+                        logger.debug(f"No videos found for search term {name}.")
+                        return None
 
-                        # Crawl missav link for detailed information
-                        title, src = await crawl_missav(link)
-                        if not title or not src:
-                            print(f"Failed to extract details for link: {link}")
+                    for img_src in vids:
+                        missav_link = f"https://missav.com/en/{img_src.split('/')[-2]}"
+                        if missav_link in seen:
+                            logger.debug(f"Skipping already processed link: {missav_link}")
                             continue
 
-                        if title.split()[0].replace("-", "") == name:
-                            data.append(
-                                [ title,name,image["src"],src
-                                ]
-                            )
+                        seen.add(missav_link)
+
+                        # Crawl MissAV link for details (merged logic)
+                        try:
+                            missav_result = await crawler.arun(url=missav_link)
+                            title = [
+                                unquote(i["href"].split("&text=")[-1]).replace("+", " ")
+                                for i in missav_result.links.get("external", [])
+                                if i["text"] == "Telegram"
+                            ]
+                            videos = [
+                                video["src"]
+                                for video in missav_result.media.get("videos", [])
+                                if video.get("src")
+                            ]
+                            title = title[0] if title else None
+                            src = videos[0] if videos else None
+
+                            if not title or not src:
+                                logger.warning(f"Failed to extract details for link: {missav_link}")
+                                continue
+
+                            # Validate and append data
+                            if title.split()[0].replace("-", "") == name:
+                                return [title, name, image["src"], src]
+
+                        except Exception as e:
+                            logger.error(f"Error while crawling MissAV link {missav_link}: {e}")
+
                 except Exception as e:
-                    print(f"Error processing image {image}: {e}")
+                    logger.error(f"Error processing image: {e}")
+
+                return None
+
+            # Step 3: Process images concurrently
+            tasks = [process_image(image) for image in images]
+            results = await asyncio.gather(*tasks)
+
+            # Filter out None results
+            data = [item for item in results if item]
 
         except Exception as e:
-            print(f"Error crawling onejav.com: {e}")
+            logger.error(f"Error crawling onejav.com: {e}")
+
         return data
 
 
