@@ -1,7 +1,12 @@
 import asyncio
 import datetime
 import xml.etree.ElementTree as ET
+import logging
 from crawl4ai import AsyncWebCrawler
+
+# Set up a logger
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logger = logging.getLogger(__name__)
 
 
 async def moj():
@@ -96,7 +101,7 @@ async def moj():
             logger.error(f"Error crawling onejav.com: {e}")
 
         return data
-                        
+
 
 # Function to create RSS feed
 def create_rss_feed(data, rss_file="feed.xml"):
@@ -141,25 +146,27 @@ def create_rss_feed(data, rss_file="feed.xml"):
         with open(rss_file, "wb") as f:
             tree.write(f, encoding="utf-8", xml_declaration=True)
 
-        print(f"RSS feed created successfully: {rss_file}")
+        logger.info(f"RSS feed created successfully: {rss_file}")
 
     except Exception as e:
-        print(f"Error creating RSS feed: {e}")
+        logger.error(f"Error creating RSS feed: {e}")
+
 
 # Run moj and create RSS feed
 async def generate_rss_feed():
     """
     Runs the moj function to fetch data and generates an RSS feed.
     """
-    print("Fetching data from OneJav and MissAV...")
+    logger.info("Fetching data from OneJav and MissAV...")
     data = await moj()
 
     if not data:
-        print("No data found to include in the RSS feed.")
+        logger.warning("No data found to include in the RSS feed.")
         return
 
-    print(f"Fetched {len(data)} items. Creating RSS feed...")
+    logger.info(f"Fetched {len(data)} items. Creating RSS feed...")
     create_rss_feed(data)
+
 
 # Run the script
 if __name__ == "__main__":
