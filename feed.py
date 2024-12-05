@@ -22,7 +22,7 @@ async def moj():
         try:
             # Step 1: Crawl the OneJav homepage for initial data
             result = await crawler.arun(url="https://onejav.com/")
-            images = result.media.get("images", [])[:30]
+            images = result.media.get("images", [])[:10]
 
             if not images:
                 logger.warning("No images found on onejav.com.")
