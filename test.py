@@ -165,7 +165,6 @@ async def moj():
 
 @app.on_message(filters.command("miss"))
 async def moj_command(client, message):
-    await message.reply_text("Usage: /miss [pages]\nExample: /miss")
     try:
         base_url = "https://onejav.com/"
         status_message = await message.reply_text("🔄 Fetching OneJav links...")
