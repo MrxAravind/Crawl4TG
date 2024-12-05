@@ -1,12 +1,12 @@
-from urllib.parse import unquote
 import asyncio
 import datetime
 import xml.etree.ElementTree as ET
 import logging
 from crawl4ai import AsyncWebCrawler
+from urllib.parse import unquote
 
 # Set up a logger
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 
@@ -15,40 +15,42 @@ async def moj():
     Optimized function to crawl OneJav and fetch related data from MissAV, 
     with the MissAV crawling logic directly integrated.
     """
+    logger.info("Starting the moj function.")
     async with AsyncWebCrawler() as crawler:
         seen = set()  # Track processed links
         data = []
 
         try:
-            # Step 1: Crawl the OneJav homepage for initial data
+            logger.info("Crawling the OneJav homepage...")
             result = await crawler.arun(url="https://onejav.com/")
-            images = result.media.get("images", [])[:10]
+            images = result.media.get("images", [])[:30]
 
             if not images:
-                logger.warning("No images found on onejav.com.")
+                logger.warning("No images found on OneJav.")
                 return
 
             logger.info(f"Found {len(images)} images to process.")
 
-            # Step 2: Process each image for related MissAV links
+            # Process each image for related MissAV links
             async def process_image(image):
                 try:
-                    # Extract name and construct MissAV search URL
                     name = image.get("desc", "").split()[0]
                     if not name:
                         logger.debug("Skipping image with missing description.")
                         return None
 
+                    logger.info(f"Processing image with name: {name}")
                     search_url = f"https://missav.com/en/search/{name}"
-                    search_result = await crawler.arun(url=search_url)
+                    logger.debug(f"Generated search URL: {search_url}")
 
-                    # Find video links in MissAV search results
+                    search_result = await crawler.arun(url=search_url)
                     vids = [
                         img["src"] for img in search_result.media.get("images", [])
                         if img["src"].startswith("https://fivetiu.com")
                     ]
+
                     if not vids:
-                        logger.debug(f"No videos found for search term {name}.")
+                        logger.warning(f"No videos found for search term {name}.")
                         return None
 
                     for img_src in vids:
@@ -57,9 +59,9 @@ async def moj():
                             logger.debug(f"Skipping already processed link: {missav_link}")
                             continue
 
+                        logger.info(f"Crawling MissAV link: {missav_link}")
                         seen.add(missav_link)
 
-                        # Crawl MissAV link for details (merged logic)
                         try:
                             missav_result = await crawler.arun(url=missav_link)
                             title = [
@@ -72,6 +74,7 @@ async def moj():
                                 for video in missav_result.media.get("videos", [])
                                 if video.get("src")
                             ]
+
                             title = title[0] if title else None
                             src = videos[0] if videos else None
 
@@ -79,28 +82,29 @@ async def moj():
                                 logger.warning(f"Failed to extract details for link: {missav_link}")
                                 continue
 
-                            # Validate and append data
                             if title.split()[0].replace("-", "") == name:
+                                logger.info(f"Valid data found for {name}. Title: {title}")
                                 return [title, name, image["src"], src]
 
                         except Exception as e:
-                            logger.error(f"Error while crawling MissAV link {missav_link}: {e}")
+                            logger.error(f"Error crawling MissAV link {missav_link}: {e}")
 
                 except Exception as e:
-                    logger.error(f"Error processing image: {e}")
+                    logger.error(f"Error processing image {image}: {e}")
 
                 return None
 
-            # Step 3: Process images concurrently
+            logger.info("Processing images concurrently.")
             tasks = [process_image(image) for image in images]
             results = await asyncio.gather(*tasks)
 
-            # Filter out None results
+            logger.info("Filtering valid results.")
             data = [item for item in results if item]
 
         except Exception as e:
-            logger.error(f"Error crawling onejav.com: {e}")
+            logger.error(f"Error crawling OneJav: {e}")
 
+        logger.info(f"Finished moj function with {len(data)} valid results.")
         return data
 
 
@@ -108,13 +112,9 @@ async def moj():
 def create_rss_feed(data, rss_file="feed.xml"):
     """
     Creates an RSS feed file from the provided data.
-    
-    Args:
-        data (list): A list of dictionaries containing feed item details.
-        rss_file (str): The path to the RSS feed file to create.
     """
     try:
-        # Create the RSS root
+        logger.info("Creating the RSS feed.")
         rss = ET.Element("rss", version="2.0")
         channel = ET.SubElement(rss, "channel")
 
@@ -130,6 +130,7 @@ def create_rss_feed(data, rss_file="feed.xml"):
         # Add items to the RSS feed
         for item in data:
             title, name, img_url, video_url = item
+            logger.debug(f"Adding item to RSS feed: {title}")
 
             rss_item = ET.SubElement(channel, "item")
             ET.SubElement(rss_item, "title").text = title
@@ -158,7 +159,7 @@ async def generate_rss_feed():
     """
     Runs the moj function to fetch data and generates an RSS feed.
     """
-    logger.info("Fetching data from OneJav and MissAV...")
+    logger.info("Starting RSS feed generation.")
     data = await moj()
 
     if not data:
